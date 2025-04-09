@@ -130,8 +130,9 @@ class NTupleApproximator:
         
         # Load the model data
         with open(filename, 'rb') as f:
+            print("Loading model...")
             model_data = pickle.load(f)
-        
+        print("Model loaded.")
         # Extract model parameters
         board_size = model_data['board_size']
         patterns = model_data['patterns']

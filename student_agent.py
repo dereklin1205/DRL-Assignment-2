@@ -11,13 +11,12 @@ import math
 import gdown
 from collections import defaultdict
 from Approximator import NTupleApproximator
-from UCTMCTS import *
+from UCTMCTS import TreeSearch, DecisionNode
 from Game2048Env import Game2048Env
 # 方法 1：使用模糊匹配（自動轉換連結）
-url ="https://drive.google.com/file/d/1ieYr5Av-OvMGNCR3myiFhhG-y1XvSP7_/view?usp=sharing"
-output = "converted_model_for_submission.pkl"
-gdown.download(url, output, quiet=False, fuzzy=True)
-approximator = NTupleApproximator.load_model("converted_model_for_submission.pkl")
+
+approximator = NTupleApproximator.load_model("converted_model.pkl")
+
 def get_action(state, score):
     global approximator
     env = Game2048Env()
@@ -27,21 +26,13 @@ def get_action(state, score):
     def value_function(a):
         return approximator.value(a)
     # Create the MCTS agent
-    iterations = 500  # Number of MCTS iterations
-    exploration_constant = 0.0025  # Exploration constant for UCT
-    mcts = TreeSearch(env, approximator)
     
-
+    mcts = TreeSearch(env, approximator)
     root_node = DecisionNode(state, score, env=env)
     for _ in range(mcts.iterations):
         mcts.run_simulation(root_node)
 
     best_action, distribution = mcts.best_action_distribution(root_node)
-    state, score, done, _ = env.step(best_action)  # Apply the selected action
-    # Play the game
-    print(state)
-        # Run MCTS to get the best action        
-        # Take the best action
     return best_action
     
     # You can submit this random agent to evaluate the performance of a purely random strategy.
