@@ -13,26 +13,21 @@ from Approximator import NTupleApproximator
 from UCTMCTS import TreeSearch, DecisionNode
 from Game2048Env import Game2048Env
 
-# Global variable to keep track of whether the model has been loaded
-approximator = None
-
 def get_action(state, score):
-    global approximator
-    
-    # Load model only if it hasn't been loaded yet
-    if approximator is None:
+    # Check if the function has the approximator attribute
+    if not hasattr(get_action, "approximator"):
         print("Downloading model...")
-        approximator = NTupleApproximator.load_model("converted_model.pkl")
+        get_action.approximator = NTupleApproximator.load_model("converted_model.pkl")
     
     env = Game2048Env()
     env.board = state
     env.score = score
     
     def value_function(a):
-        return approximator.value(a)
+        return get_action.approximator.value(a)
     
     # Create the MCTS agent
-    mcts = TreeSearch(env, approximator)
+    mcts = TreeSearch(env, get_action.approximator)
     root_node = DecisionNode(state, score, env=env)
     for _ in range(mcts.iterations):
         mcts.run_simulation(root_node)
