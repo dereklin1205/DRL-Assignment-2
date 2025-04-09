@@ -1,4 +1,3 @@
-# Remember to adjust your student ID in meta.xml
 import numpy as np
 import pickle
 import random
@@ -13,20 +12,26 @@ from collections import defaultdict
 from Approximator import NTupleApproximator
 from UCTMCTS import TreeSearch, DecisionNode
 from Game2048Env import Game2048Env
-# 方法 1：使用模糊匹配（自動轉換連結）
-print("Downloading model...")
-approximator = NTupleApproximator.load_model("converted_model.pkl")
+
+# Global variable to keep track of whether the model has been loaded
+approximator = None
 
 def get_action(state, score):
     global approximator
+    
+    # Load model only if it hasn't been loaded yet
+    if approximator is None:
+        print("Downloading model...")
+        approximator = NTupleApproximator.load_model("converted_model.pkl")
+    
     env = Game2048Env()
     env.board = state
     env.score = score
-    # print("hello")
+    
     def value_function(a):
         return approximator.value(a)
-    # Create the MCTS agent
     
+    # Create the MCTS agent
     mcts = TreeSearch(env, approximator)
     root_node = DecisionNode(state, score, env=env)
     for _ in range(mcts.iterations):
@@ -35,8 +40,7 @@ def get_action(state, score):
     best_action, distribution = mcts.best_action_distribution(root_node)
     return best_action
     
-    # You can submit this random agent to evaluate the performance of a purely random strategy.
-## main function for testing the agent
+# main function for testing the agent
 if __name__ == "__main__":
     env = Game2048Env()
     state = env.reset()
@@ -52,4 +56,3 @@ if __name__ == "__main__":
         # Apply the selected action
         state, score, done, _ = env.step(action)  
         print(state)
-
