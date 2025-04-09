@@ -1,5 +1,8 @@
 tqdm
 requests
 argparse
-torch
 matplotlib
+torch
+gym
+gdown
+numpy==1.23.4

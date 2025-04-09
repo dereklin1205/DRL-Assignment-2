@@ -1,4 +1,3 @@
-# custom_taxi_env.py
 import gym
 import numpy as np
 import time
@@ -21,6 +20,3 @@ if __name__ == "__main__":
     env.eval_score()  
     
 
-
-
-    
