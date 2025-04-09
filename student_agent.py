@@ -14,7 +14,7 @@ from Approximator import NTupleApproximator
 from UCTMCTS import TreeSearch, DecisionNode
 from Game2048Env import Game2048Env
 # 方法 1：使用模糊匹配（自動轉換連結）
-
+print("Downloading model...")
 approximator = NTupleApproximator.load_model("converted_model.pkl")
 
 def get_action(state, score):
