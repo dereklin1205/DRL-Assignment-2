@@ -4,17 +4,15 @@ import math
 import numpy as np
 from Game2048Env import Game2048Env
 from Approximator import NTupleApproximator
-# Note: This MCTS implementation is almost identical to the previous one,
-# except for the rollout phase, which now incorporates the approximator.
 
-# Node for TD-MCTS using the TD-trained value approximator
-class PlayerNode:
+# TreeSearch implementation for 2048 using TD-trained value approximator
+class DecisionNode:
     def __init__(self, state, score, parent=None, action=None, env=None):
         self.state = state
         self.score = score
         self.parent = parent
         self.action = action
-        self.children = {}  # action -> ChanceNode
+        self.children = {}  # action -> RandomNode
         self.visits = 0
         self.total_reward = 0.0
         self.legal_actions = {}  # action -> (afterstate, after_score)
@@ -30,20 +28,20 @@ class PlayerNode:
         self.untried_actions = list(self.legal_actions.keys())
 
     def fully_expanded(self):
-        if not self.legal_actions:  # 沒有合法動作 → 不需要展開
+        if not self.legal_actions:
             return False
         return all(action in self.children for action in self.legal_actions)
+        
     def is_leaf(self):
-        # 如果還有未展開的動作 → 是 leaf
         return not self.fully_expanded()
 
-class ChanceNode:
+class RandomNode:
     def __init__(self, state, score, parent, action):
         self.state = state
         self.score = score
         self.parent = parent
-        self.action = action  # The action taken to reach this node (by player)
-        self.children = {}  # (pos, val) -> PlayerNode
+        self.action = action
+        self.children = {}  # (pos, val) -> DecisionNode
         self.visits = 0
         self.total_reward = 0.0
         self.expanded = False  
@@ -54,8 +52,8 @@ class ChanceNode:
     def fully_expanded(self, empty_tiles):
         return len(self.children) == len(empty_tiles) * 2  # For 2 and 4
 
-#value
-class UCTMCTS:
+# Main search algorithm
+class TreeSearch:
     def __init__(self, env, approximator, iterations=500, exploration_constant=0.001, rollout_depth=10, gamma=1):
         self.env = env
         self.iterations = iterations
@@ -77,7 +75,7 @@ class UCTMCTS:
         return new_env
     
     def evaluate_best_afterstate_value(self, sim_env, approximator):
-        temp_node = PlayerNode(sim_env.board.copy(), sim_env.score, env=sim_env)
+        temp_node = DecisionNode(sim_env.board.copy(), sim_env.score, env=sim_env)
         if not temp_node.legal_actions:
             return 0
         
@@ -89,25 +87,21 @@ class UCTMCTS:
         return max_value
     
     def select_child(self, node):
-        # TODO: Use the UCT formula: Q + c * sqrt(log(parent_visits)/child_visits) to select the child
-        best_uct_score = -float("inf")
+        # Select child using UCB formula
+        best_ucb_score = -float("inf")
         best_child = None
         best_action = None
         for action, child in node.children.items():
             if child.visits == 0:
-                uct_score = self.approximator.value(child.state)
+                ucb_score = self.approximator.value(child.state)
             else:
                 avg_reward = child.total_reward / child.visits
-                # print(avg_reward)
                 exploration = self.c * math.sqrt(math.log(node.visits) / child.visits)
-                uct_score = avg_reward + exploration
-                # print(f"reward:{avg_reward}, exploration:{math.sqrt(math.log(node.visits) / child.visits)}, ratio:{avg_reward/exploration}")
-            if uct_score > best_uct_score:
+                ucb_score = avg_reward + exploration
+            if ucb_score > best_ucb_score:
                 best_child = child
                 best_action = action
-                best_uct_score = uct_score
-        # if best_child is None:
-        #     print("Error")
+                best_ucb_score = ucb_score
         return best_action, best_child
     
     def select(self, root):
@@ -116,23 +110,18 @@ class UCTMCTS:
         r_sum = 0
         while not node.is_leaf():
 
-            if isinstance(node, PlayerNode):
-                # print(f"[Debug] node.is_leaf(): {node.is_leaf()}")
-                # print(f"legal_actions: {list(node.legal_actions.keys())}")
-                # print(f"children: {list(node.children.keys())}")
+            if isinstance(node, DecisionNode):
                 action, _ = self.select_child(node)
                 prev_score = sim_env.score
                 _, new_score, done, _ = sim_env.step(action, spawn=False)
                 reward = new_score - prev_score
                 r_sum += reward
 
-
                 if action not in node.children:
-                    node.children[action] = ChanceNode(sim_env.board.copy(), new_score, parent=node, action=action)
+                    node.children[action] = RandomNode(sim_env.board.copy(), new_score, parent=node, action=action)
                 node = node.children[action]
 
-            elif isinstance(node, ChanceNode):
-
+            elif isinstance(node, RandomNode):
                 keys = list(node.children.keys())  # key: (pos, val)
                 weights = [0.9 if val == 2 else 0.1 for (_, val) in keys]
                 sampled_key = random.choices(keys, weights=weights, k=1)[0]
@@ -145,35 +134,27 @@ class UCTMCTS:
         if sim_env.is_game_over():
             return node, sim_env
 
-        if isinstance(node, PlayerNode) and not node.children:
+        if isinstance(node, DecisionNode) and not node.children:
             for action, (board, new_score) in node.legal_actions.items():
-
-                chance_node = ChanceNode(board.copy(), new_score, parent=node, action=action)
-                node.children[action] = chance_node
+                random_node = RandomNode(board.copy(), new_score, parent=node, action=action)
+                node.children[action] = random_node
   
-
-        elif isinstance(node, ChanceNode) and not node.expanded:
-            self.expand_chance_node(node)
+        elif isinstance(node, RandomNode) and not node.expanded:
+            self.expand_random_node(node)
 
     def rollout(self, node, sim_env, r_sum):
         """
-        根據 rollout 策略（A/B/C）對節點估值
-        - 若 depth > 0，採用 C 策略（玩幾步隨機模擬）
-        - 若 node 是 PlayerNode（A 策略）：評估所有 afterstate
-        - 若 node 是 ChanceNode（B 策略）：直接估值
+        Estimate node value using the approximator
         """
-
-        if isinstance(node, PlayerNode):
+        if isinstance(node, DecisionNode):
             value = self.evaluate_best_afterstate_value(sim_env, self.approximator)
-
-        elif isinstance(node, ChanceNode):
+        elif isinstance(node, RandomNode):
             value = self.approximator.value(node.state)
-
         else:
-            value = 0  # fallback
+            value = 0
 
         value = r_sum + value
-        # Normalization（如果有探索常數 c）
+        # Normalize values
         if self.c != 0:
             self.min_value_seen = min(self.min_value_seen, value)
             self.max_value_seen = max(self.max_value_seen, value)
@@ -187,14 +168,13 @@ class UCTMCTS:
         return normalized_return
 
     def backpropagate(self, node, reward):
-        # TODO: Propagate the reward up the tree, updating visit counts and total rewards.
+        # Update stats throughout the tree
         while node is not None:
             node.visits += 1
             node.total_reward += reward
             node = node.parent
-            # reward *= self.gamma
 
-    def expand_chance_node(self, node):
+    def expand_random_node(self, node):
         empty_tiles = list(zip(*np.where(node.state == 0)))
 
         for pos in empty_tiles:
@@ -203,23 +183,22 @@ class UCTMCTS:
                 new_state[pos] = val
                 key = (pos, val)
                 if key not in node.children:
-                    child = PlayerNode(new_state, node.score, parent=node, action=key, env=self.env)
+                    child = DecisionNode(new_state, node.score, parent=node, action=key, env=self.env)
                     node.children[key] = child
 
         node.expanded = True
         
     def run_simulation(self, root):
-
-        # --- Selection ---
+        # Selection
         node, sim_env, r_sum = self.select(root)
 
-        # --- Expansion ---
+        # Expansion
         self.expand(node, sim_env)
 
-        # --- Rollout ---
+        # Rollout
         reward = self.rollout(node, sim_env, r_sum)
 
-        # --- Backpropagation ---
+        # Backpropagation
         self.backpropagate(node, reward)
 
     def best_action_distribution(self, root):
@@ -236,11 +215,12 @@ class UCTMCTS:
                 best_visits = child.visits
                 best_action = action
         return best_action, distribution
+
 if __name__ == "__main__":
     # Example usage
     env = Game2048Env()
     approximator = NTupleApproximator.load_model("../converted_model.pkl")
-    mcts = UCTMCTS(env, approximator)
+    tree_search = TreeSearch(env, approximator)
     
     # Initialize the game environment
     state = env.reset()
@@ -253,10 +233,10 @@ if __name__ == "__main__":
         if not legal_moves:
             break
 
-        root_node = PlayerNode(state, score, env=env)
-        for _ in range(mcts.iterations):
-            mcts.run_simulation(root_node)
+        root_node = DecisionNode(state, score, env=env)
+        for _ in range(tree_search.iterations):
+            tree_search.run_simulation(root_node)
 
-        best_action, distribution = mcts.best_action_distribution(root_node)
+        best_action, distribution = tree_search.best_action_distribution(root_node)
         state, score, done, _ = env.step(best_action)  # Apply the selected action
         print(state)

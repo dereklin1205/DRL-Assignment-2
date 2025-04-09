@@ -27,12 +27,12 @@ def get_action(state, score):
     def value_function(a):
         return approximator.value(a)
     # Create the MCTS agent
-    iterations = 100  # Number of MCTS iterations
-    exploration_constant = 0.001  # Exploration constant for UCT
-    mcts = UCTMCTS(env, approximator)
+    iterations = 500  # Number of MCTS iterations
+    exploration_constant = 0.0025  # Exploration constant for UCT
+    mcts = TreeSearch(env, approximator)
     
 
-    root_node = PlayerNode(state, score, env=env)
+    root_node = DecisionNode(state, score, env=env)
     for _ in range(mcts.iterations):
         mcts.run_simulation(root_node)
 
