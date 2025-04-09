@@ -39,7 +39,7 @@ def get_action(state, score):
     best_action, distribution = mcts.best_action_distribution(root_node)
     state, score, done, _ = env.step(best_action)  # Apply the selected action
     # Play the game
-
+    print(state)
         # Run MCTS to get the best action        
         # Take the best action
     return best_action
