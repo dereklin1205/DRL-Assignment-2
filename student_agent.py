@@ -15,7 +15,7 @@ from Game2048Env import Game2048Env
 
 def get_action(state, score):
     # Check if the function has the approximator attribute
-    print("Checking for model...")
+
     if not hasattr(get_action, "approximator"):
         print("Downloading model...")
         get_action.approximator = NTupleApproximator.load_model("converted_model.pkl")
