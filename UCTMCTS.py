@@ -55,8 +55,8 @@ class ChanceNode:
         return len(self.children) == len(empty_tiles) * 2  # For 2 and 4
 
 #value
-class TD_MCTS:
-    def __init__(self, env, approximator, iterations=100, exploration_constant=0.001, rollout_depth=10, gamma=1):
+class UCTMCTS:
+    def __init__(self, env, approximator, iterations=500, exploration_constant=0.001, rollout_depth=10, gamma=1):
         self.env = env
         self.iterations = iterations
         self.c = exploration_constant
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     # Example usage
     env = Game2048Env()
     approximator = NTupleApproximator.load_model("../converted_model.pkl")
-    mcts = TD_MCTS(env, approximator)
+    mcts = UCTMCTS(env, approximator)
     
     # Initialize the game environment
     state = env.reset()

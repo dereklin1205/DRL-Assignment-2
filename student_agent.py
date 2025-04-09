@@ -11,7 +11,7 @@ import math
 import gdown
 from collections import defaultdict
 from Approximator import NTupleApproximator
-from UCTMCTS import UCTMCTS
+from UCTMCTS import *
 from Game2048Env import Game2048Env
 # 方法 1：使用模糊匹配（自動轉換連結）
 url ="https://drive.google.com/file/d/1ieYr5Av-OvMGNCR3myiFhhG-y1XvSP7_/view?usp=sharing"
@@ -29,8 +29,15 @@ def get_action(state, score):
     # Create the MCTS agent
     iterations = 100  # Number of MCTS iterations
     exploration_constant = 0.001  # Exploration constant for UCT
-    mcts = UCTMCTS(env, value_function, iterations, exploration_constant)
-    best_action, action_distribution = mcts.run_mcts(env.board, env.score)
+    mcts = UCTMCTS(env, approximator)
+    
+
+    root_node = PlayerNode(state, score, env=env)
+    for _ in range(mcts.iterations):
+        mcts.run_simulation(root_node)
+
+    best_action, distribution = mcts.best_action_distribution(root_node)
+    state, score, done, _ = env.step(best_action)  # Apply the selected action
     # Play the game
 
         # Run MCTS to get the best action        
