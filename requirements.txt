@@ -5,4 +5,4 @@ matplotlib
 torch
 gym
 gdown
-numpy
+numpy==1.23.4
