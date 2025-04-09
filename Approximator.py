@@ -89,7 +89,7 @@ class NTupleApproximator:
         """
         for i, pattern in enumerate(self.symmetry_patterns):
             feature = self.get_features(board, pattern)
-            self.weights[i //8 ][feature] += alpha * delta
+            self.weights[i // 8][feature] += alpha * delta
             
     def save_model(self, filename):
         """
@@ -136,7 +136,7 @@ class NTupleApproximator:
         board_size = model_data['board_size']
         patterns = model_data['patterns']
         weights = model_data['weights']
-        
+        # print(f"Loaded model with board size: {board_size}, patterns: {patterns}, weights: {len(weights)}")
         # If symmetry patterns not provided, regenerate them
         if symmetry_patterns is None:
             symmetry_patterns = set()
@@ -145,11 +145,17 @@ class NTupleApproximator:
         # Create a new model instance
         model = cls(board_size, patterns, symmetry_patterns)
         model.weights = [defaultdict(float) for _ in range(len(patterns))]
-
-        # Load the weights
         for i in range(len(weights)):
-            model.weights[i].update(weights[i])
-        
+        # Convert defaultdict keys to tuples if they're not already
+            for key, value in weights[i].items():
+                if not isinstance(key, tuple) and key is not None:
+                    tuple_key = tuple(key)
+                    model.weights[i][tuple_key] = value
+                else:
+                    model.weights[i][key] = value
+        # Load the weights
+        #load the model weights into the model
+    
         print(f"Model loaded from {filename}")
         return model
     
@@ -207,7 +213,7 @@ def td_learning(env, approximator, num_episodes=1000, alpha=0.1, gamma=1.0):
     final_scores = []
     success_flags = []
     max_tiles = []
-    scores = []
+    
     for episode in range(num_episodes):
         state = env.reset()
         done = False
@@ -320,21 +326,14 @@ def td_learning(env, approximator, num_episodes=1000, alpha=0.1, gamma=1.0):
             print(f"Episode {episode+1}/{num_episodes} | Avg Score: {avg_score:.2f} | Success Rate: {success_rate:.2f} | Max Tile: {max_tile}")
         if (episode + 1) % 1000 == 0:
             # Save model every 1000 episodes
-            approximator.save_model(f"reward_2048_model_retrainlonglong_{episode+1}.pkl")
-            scores.append(np.mean(final_scores[-1000:]))
-            plt.plot(scores)
-            plt.xlabel("Episode")
-            plt.ylabel("Score")
-            plt.title("TD Learning Scores")
-            plt.savefig("td_learning_scores.png")
-
+            approximator.save_model(f"2048_model_{20000+episode+1}.pkl")
     return final_scores, max_tiles
 
 # Symmetry utility functions remain the same
 # Pattern definition remains the same
 
 # Training code
-def train_2048_agent(load_from=None, save_to="2048_model.pkl", num_episodes=50000):
+def train_2048_agent(load_from=None, save_to="2048_model.pkl", num_episodes=10000):
     # Generate symmetry patterns
     symm = set()
     sym = generate_symmetry(patterns, symm)
@@ -418,7 +417,7 @@ def play_game(model_path, num_games=1, render=True):
         state = env.reset()
         if render:
             print(f"\nGame {game+1}/{num_games}")
-            env.render()
+            # env.render()
         
         done = False
         while not done:
@@ -428,9 +427,9 @@ def play_game(model_path, num_games=1, render=True):
                 
             state, score, done, _ = env.step(action)
             
-            if render:
-                env.render(action=action)
-        
+            # if render:
+                # env.render(action=action)
+            # print(state)
         # Record results
         scores.append(env.score)
         max_tile = np.max(env.board)
@@ -450,18 +449,19 @@ def play_game(model_path, num_games=1, render=True):
     print(f"Max Tiles: {max_tiles}")
     
     return win_rate, avg_score
-def generate_symmetry(patterns, sym):
-    
+def generate_symmetry(patterns: list[tuple],sym:set):
+    syms = []
     for pattern in patterns:
-        sym.add(tuple(pattern))
-        sym.add(tuple(rot90(pattern,4)))
-        sym.add(tuple(rot180(pattern,4)))
-        sym.add(tuple(rot270(pattern,4)))
-        sym.add(tuple(flip_diag(pattern,4)))
-        sym.add(tuple(flip_vert(pattern,4)))
-        sym.add(tuple(flip_hor(pattern,4)))
-        sym.add(tuple(flip_antidiag(pattern,4)))
-    return list(sym)
+        syms.append(tuple(pattern))
+        syms.append(tuple(rot90(pattern,4)))
+        syms.append(tuple(rot180(pattern,4)))
+        syms.append(tuple(rot270(pattern,4)))
+        syms.append(tuple(flip_diag(pattern,4)))
+        syms.append(tuple(flip_vert(pattern,4)))
+        syms.append(tuple(flip_hor(pattern,4)))
+        syms.append(tuple(flip_antidiag(pattern,4)))
+    print(syms)
+    return syms
 patterns = [
     [(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)],
     [(0,1),(0,2),(1,1),(1,2),(2,1),(3,1)],
@@ -494,7 +494,7 @@ if __name__ == "__main__":
                         help='Path to load a model from (for continuing training or playing)')
     parser.add_argument('--save', type=str, default='2048_model.pkl', 
                         help='Path to save the trained model')
-    parser.add_argument('--episodes', type=int, default=100000, 
+    parser.add_argument('--episodes', type=int, default=20000, 
                         help='Number of episodes for training')
     parser.add_argument('--games', type=int, default=10, 
                         help='Number of games to play in play mode')
@@ -555,3 +555,4 @@ if __name__ == "__main__":
 # plt.ylabel("Score")
 # plt.title("TD Learning Scores")
 # plt.savefig("td_learning_scores.png")
+
