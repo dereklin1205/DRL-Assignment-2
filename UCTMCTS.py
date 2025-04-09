@@ -220,7 +220,7 @@ class UCTMCTS:
             node.visits += 1
             node.total_reward += reward
             node = node.parent
-            
+            ###reerererqwer
     def run_mcts(self, root_state, root_score):
         """
         Runs the full MCTS process to select the best action.
@@ -319,5 +319,6 @@ def play_with_mcts(env, approximator, iterations=500, exploration_constant=0.01)
 if __name__ == "__main__":
     # Example usage of the play_with_mcts function
     env = Game2048Env()
+    print("1")
     approximator = NTupleApproximator.load_model("converted_model_for_submission.pkl")
     play_with_mcts(env, approximator, iterations=100, exploration_constant=0.001)
