@@ -14,7 +14,7 @@ from Approximator import NTupleApproximator
 from UCTMCTS import UCTMCTS
 from Game2048Env import Game2048Env
 # 方法 1：使用模糊匹配（自動轉換連結）
-url ="https://drive.google.com/file/d/10froWn0fN-mOz03TSUg3BwVHGF7LNARI/view?usp=drive_link"
+url ="https://drive.google.com/file/d/1uTrQ4LyLTce2_ch03jPY2muKPA7Skk0W/view?usp=sharing"
 output = "converted_model_for_submission.pkl"
 gdown.download(url, output, quiet=False, fuzzy=True)
 approximator = NTupleApproximator.load_model("converted_model_for_submission.pkl")
