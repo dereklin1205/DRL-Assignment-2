@@ -12,7 +12,6 @@ from collections import defaultdict
 from Approximator import NTupleApproximator
 from UCTMCTS import TreeSearch, DecisionNode
 from Game2048Env import Game2048Env
-
 def get_action(state, score):
     # Check if the function has the approximator attribute
 
