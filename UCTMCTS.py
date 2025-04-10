@@ -227,7 +227,7 @@ if __name__ == "__main__":
     env.render()
     done = False
     score = 0
-
+    print("000")
     while not done:
         legal_moves = [a for a in range(4) if env.is_move_legal(a)]
         if not legal_moves:
