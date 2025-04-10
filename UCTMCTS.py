@@ -54,7 +54,7 @@ class RandomNode:
 
 # Main search algorithm
 class TreeSearch:
-    def __init__(self, env, approximator, iterations=10, exploration_constant=0.0, rollout_depth=10, gamma=1):
+    def __init__(self, env, approximator, iterations=50, exploration_constant=0.0, rollout_depth=10, gamma=1):
         self.env = env
         self.iterations = iterations
         self.c = exploration_constant
