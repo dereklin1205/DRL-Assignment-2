@@ -55,12 +55,10 @@ class ChanceNode:
 
 # Main search algorithm
 class MCTS:
-    def __init__(self, env, value_model, iterations=50, explore_weight=0.0, lookahead=10, discount=1):
+    def __init__(self, env, value_model, iterations=50, explore_weight=0.0):
         self.env = env
         self.iterations = iterations
         self.explore_weight = explore_weight
-        self.lookahead = lookahead
-        self.discount = discount
         
         self.value_model = value_model
         self.min_value = float('inf')

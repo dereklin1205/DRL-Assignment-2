@@ -10,7 +10,7 @@ import math
 import gdown
 from collections import defaultdict
 from Approximator import NTupleApproximator
-from UCTMCTS import TreeSearch, DecisionNode
+from UCTMCTS import MCTS, ActionNode, ChanceNode
 from Game2048Env import Game2048Env
 def get_action(state, score):
     # Check if the function has the approximator attribute
@@ -25,14 +25,13 @@ def get_action(state, score):
     
     def value_function(a):
         return get_action.approximator.value(a)
-    
-    # Create the MCTS agent
-    mcts = TreeSearch(env, get_action.approximator)
-    root_node = DecisionNode(state, score, env=env)
+    mcts = MCTS(env, get_action.approximator, iterations = 10, explore_weight=0.0)
+    root = ActionNode(env.board, score, env=env)
     for _ in range(mcts.iterations):
-        mcts.run_simulation(root_node)
+            mcts.simulate(root)
+    # Create the MCTS agent
 
-    best_action, distribution = mcts.best_action_distribution(root_node)
+    best_action, distribution = mcts.best_action_distribution(root)
     return best_action
     
 # main function for testing the agent
