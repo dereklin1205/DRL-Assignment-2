@@ -6,237 +6,249 @@ from Game2048Env import Game2048Env
 from Approximator import NTupleApproximator
 
 # TreeSearch implementation for 2048 using TD-trained value approximator
-class DecisionNode:
-    def __init__(self, state, score, parent=None, action=None, env=None):
-        self.state = state
+class ActionNode:
+    def __init__(self, board, score, parent=None, action=None, env=None):
+        self.board = board
         self.score = score
         self.parent = parent
         self.action = action
-        self.children = {}  # action -> RandomNode
+        self.children = {}  # action -> ChanceNode
         self.visits = 0
-        self.total_reward = 0.0
-        self.legal_actions = {}  # action -> (afterstate, after_score)
-        if env is not None:
-            for a in range(4):
-                sim = copy.deepcopy(env)
-                sim.board = state.copy()
-                sim.score = score
-                board, new_score, done, _ = sim.step(a, spawn=False)
-                if not np.array_equal(state, board):
-                    self.legal_actions[a] = (board, new_score)
+        self.value_sum = 0.0
+        self.valid_moves = {}  # action -> (next_board, next_score)
         
-        self.untried_actions = list(self.legal_actions.keys())
+        # Find valid moves if environment is provided
+        if env is not None:
+            for move in range(4):
+                sim = copy.deepcopy(env)
+                sim.board = board.copy()
+                sim.score = score
+                next_board, next_score, done, _ = sim.step(move, spawn=False)
+                if not np.array_equal(board, next_board):
+                    self.valid_moves[move] = (next_board, next_score)
+        
+        self.unexplored_moves = list(self.valid_moves.keys())
 
-    def fully_expanded(self):
-        if not self.legal_actions:
-            return False
-        return all(action in self.children for action in self.legal_actions)
+    def is_fully_expanded(self):
+        return self.valid_moves and all(move in self.children for move in self.valid_moves)
         
     def is_leaf(self):
-        return not self.fully_expanded()
+        return not self.is_fully_expanded()
 
-class RandomNode:
-    def __init__(self, state, score, parent, action):
-        self.state = state
+class ChanceNode:
+    def __init__(self, board, score, parent, action):
+        self.board = board
         self.score = score
         self.parent = parent
         self.action = action
-        self.children = {}  # (pos, val) -> DecisionNode
+        self.children = {}  # (position, tile_value) -> ActionNode
         self.visits = 0
-        self.total_reward = 0.0
-        self.expanded = False  
+        self.value_sum = 0.0
+        self.expanded = False
 
     def is_leaf(self):
         return not self.expanded
     
-    def fully_expanded(self, empty_tiles):
-        return len(self.children) == len(empty_tiles) * 2  # For 2 and 4
+    def is_fully_expanded(self, empty_tiles):
+        # Each empty tile can have a 2 or 4 value
+        return len(self.children) == len(empty_tiles) * 2
 
 # Main search algorithm
-class TreeSearch:
-    def __init__(self, env, approximator, iterations=50, exploration_constant=0.0, rollout_depth=10, gamma=1):
+class MCTS:
+    def __init__(self, env, value_model, iterations=50, explore_weight=0.0, lookahead=10, discount=1):
         self.env = env
         self.iterations = iterations
-        self.c = exploration_constant
-        self.rollout_depth = rollout_depth
-        self.gamma = gamma
+        self.explore_weight = explore_weight
+        self.lookahead = lookahead
+        self.discount = discount
         
-        self.approximator = approximator
-        self.min_value_seen = float('inf')
-        self.max_value_seen = float('-inf')
+        self.value_model = value_model
+        self.min_value = float('inf')
+        self.max_value = float('-inf')
 
-    def create_env_from_state(self, state, score):
-        """
-        Creates a deep copy of the environment with a given board state and score.
-        """
+    def clone_env(self, board, score):
+        """Creates a copy of the environment with given board and score."""
         new_env = copy.deepcopy(self.env)
-        new_env.board = state.copy()
+        new_env.board = board.copy()
         new_env.score = score
         return new_env
     
-    def evaluate_best_afterstate_value(self, sim_env, approximator):
-        temp_node = DecisionNode(sim_env.board.copy(), sim_env.score, env=sim_env)
-        if not temp_node.legal_actions:
+    def get_best_afterstate_value(self, env, model):
+        """Find the value of the best possible action."""
+        temp_node = ActionNode(env.board.copy(), env.score, env=env)
+        if not temp_node.valid_moves:
             return 0
         
-        max_value = float('-inf')
-        for a, (board, new_score) in temp_node.legal_actions.items():
-            reward = new_score - sim_env.score
-            v = reward + approximator.value(board)
-            max_value = max(max_value, v)
-        return max_value
+        best_value = float('-inf')
+        for action, (board, new_score) in temp_node.valid_moves.items():
+            immediate_reward = new_score - env.score
+            state_value = immediate_reward + model.value(board)
+            best_value = max(best_value, state_value)
+        return best_value
     
-    def select_child(self, node):
-        # Select child using UCB formula
-        best_ucb_score = -float("inf")
+    def select_best_child(self, node):
+        """Select child using UCB formula."""
+        best_score = -float("inf")
         best_child = None
         best_action = None
+        
         for action, child in node.children.items():
             if child.visits == 0:
-                ucb_score = self.approximator.value(child.state)
+                ucb_score = self.value_model.value(child.board)
             else:
-                avg_reward = child.total_reward / child.visits
-                exploration = self.c * math.sqrt(math.log(node.visits) / child.visits)
-                ucb_score = avg_reward + exploration
-            if ucb_score > best_ucb_score:
+                avg_value = child.value_sum / child.visits
+                exploration = self.explore_weight * math.sqrt(math.log(node.visits) / child.visits)
+                ucb_score = avg_value + exploration
+                
+            if ucb_score > best_score:
                 best_child = child
                 best_action = action
-                best_ucb_score = ucb_score
+                best_score = ucb_score
+                
         return best_action, best_child
     
-    def select(self, root):
+    def select_node(self, root):
+        """Traverse the tree to find a leaf node for expansion."""
         node = root
-        sim_env = self.create_env_from_state(node.state, node.score)
-        r_sum = 0
+        sim_env = self.clone_env(node.board, node.score)
+        reward_sum = 0
+        
         while not node.is_leaf():
-
-            if isinstance(node, DecisionNode):
-                action, _ = self.select_child(node)
+            if isinstance(node, ActionNode):
+                action, next_node = self.select_best_child(node)
                 prev_score = sim_env.score
                 _, new_score, done, _ = sim_env.step(action, spawn=False)
-                reward = new_score - prev_score
-                r_sum += reward
+                immediate_reward = new_score - prev_score
+                reward_sum += immediate_reward
 
                 if action not in node.children:
-                    node.children[action] = RandomNode(sim_env.board.copy(), new_score, parent=node, action=action)
+                    node.children[action] = ChanceNode(sim_env.board.copy(), new_score, parent=node, action=action)
                 node = node.children[action]
 
-            elif isinstance(node, RandomNode):
-                keys = list(node.children.keys())  # key: (pos, val)
-                weights = [0.9 if val == 2 else 0.1 for (_, val) in keys]
-                sampled_key = random.choices(keys, weights=weights, k=1)[0]
+            elif isinstance(node, ChanceNode):
+                # Randomly sample a child based on tile probability (90% for 2, 10% for 4)
+                tile_positions = list(node.children.keys())
+                weights = [0.9 if val == 2 else 0.1 for (_, val) in tile_positions]
+                chosen_tile = random.choices(tile_positions, weights=weights, k=1)[0]
 
-                node = node.children[sampled_key]
-                sim_env = self.create_env_from_state(node.state, node.score)
-        return node, sim_env, r_sum
+                node = node.children[chosen_tile]
+                sim_env = self.clone_env(node.board, node.score)
+                
+        return node, sim_env, reward_sum
     
     def expand(self, node, sim_env):
+        """Expand a leaf node."""
         if sim_env.is_game_over():
             return node, sim_env
 
-        if isinstance(node, DecisionNode) and not node.children:
-            for action, (board, new_score) in node.legal_actions.items():
-                random_node = RandomNode(board.copy(), new_score, parent=node, action=action)
-                node.children[action] = random_node
+        if isinstance(node, ActionNode) and not node.children:
+            # Expand ActionNode by creating ChanceNode children for each valid move
+            for move, (board, new_score) in node.valid_moves.items():
+                chance_node = ChanceNode(board.copy(), new_score, parent=node, action=move)
+                node.children[move] = chance_node
   
-        elif isinstance(node, RandomNode) and not node.expanded:
-            self.expand_random_node(node)
+        elif isinstance(node, ChanceNode) and not node.expanded:
+            # Expand ChanceNode by adding possible tile spawns (2 or 4) at empty positions
+            self.expand_chance_node(node)
 
-    def rollout(self, node, sim_env, r_sum):
-        """
-        Estimate node value using the approximator
-        """
-        if isinstance(node, DecisionNode):
-            value = self.evaluate_best_afterstate_value(sim_env, self.approximator)
-        elif isinstance(node, RandomNode):
-            value = self.approximator.value(node.state)
+    def evaluate(self, node, sim_env, reward_sum):
+        """Estimate node value using the value model."""
+        if isinstance(node, ActionNode):
+            state_value = self.get_best_afterstate_value(sim_env, self.value_model)
+        elif isinstance(node, ChanceNode):
+            state_value = self.value_model.value(node.board)
         else:
-            value = 0
+            state_value = 0
 
-        value = r_sum + value
-        # Normalize values
-        if self.c != 0:
-            self.min_value_seen = min(self.min_value_seen, value)
-            self.max_value_seen = max(self.max_value_seen, value)
-            if self.max_value_seen == self.min_value_seen:
-                normalized_return = 0.0
+        total_value = reward_sum + state_value
+        
+        # Normalize values if exploration is enabled
+        if self.explore_weight != 0:
+            self.min_value = min(self.min_value, total_value)
+            self.max_value = max(self.max_value, total_value)
+            
+            if self.max_value == self.min_value:
+                normalized_value = 0.0
             else:
-                normalized_return = 2 * (value - self.min_value_seen) / (self.max_value_seen - self.min_value_seen) - 1
+                normalized_value = 2 * (total_value - self.min_value) / (self.max_value - self.min_value) - 1
         else:
-            normalized_return = value
+            normalized_value = total_value
 
-        return normalized_return
+        return normalized_value
 
-    def backpropagate(self, node, reward):
-        # Update stats throughout the tree
+    def backpropagate(self, node, value):
+        """Update statistics throughout the tree."""
         while node is not None:
             node.visits += 1
-            node.total_reward += reward
+            node.value_sum += value
             node = node.parent
 
-    def expand_random_node(self, node):
-        empty_tiles = list(zip(*np.where(node.state == 0)))
+    def expand_chance_node(self, node):
+        """Add all possible tile spawns (2 or 4) at empty positions."""
+        empty_positions = list(zip(*np.where(node.board == 0)))
 
-        for pos in empty_tiles:
-            for val in [2, 4]:
-                new_state = node.state.copy()
-                new_state[pos] = val
-                key = (pos, val)
-                if key not in node.children:
-                    child = DecisionNode(new_state, node.score, parent=node, action=key, env=self.env)
-                    node.children[key] = child
+        for pos in empty_positions:
+            for tile_value in [2, 4]:
+                new_board = node.board.copy()
+                new_board[pos] = tile_value
+                tile_key = (pos, tile_value)
+                
+                if tile_key not in node.children:
+                    child = ActionNode(new_board, node.score, parent=node, action=tile_key, env=self.env)
+                    node.children[tile_key] = child
 
         node.expanded = True
         
-    def run_simulation(self, root):
+    def simulate(self, root):
+        """Run a single Monte Carlo simulation."""
         # Selection
-        node, sim_env, r_sum = self.select(root)
+        node, sim_env, reward_sum = self.select_node(root)
 
         # Expansion
         self.expand(node, sim_env)
 
-        # Rollout
-        reward = self.rollout(node, sim_env, r_sum)
+        # Evaluation (replacing rollout)
+        value = self.evaluate(node, sim_env, reward_sum)
 
         # Backpropagation
-        self.backpropagate(node, reward)
+        self.backpropagate(node, value)
 
-    def best_action_distribution(self, root):
-        '''
-        Computes the visit count distribution for each action at the root node.
-        '''
+    def get_best_move(self, root):
+        """Find the best move based on visit counts."""
         total_visits = sum(child.visits for child in root.children.values())
-        distribution = np.zeros(4)
+        move_distribution = np.zeros(4)
         best_visits = -1
-        best_action = None
-        for action, child in root.children.items():
-            distribution[action] = child.visits / total_visits if total_visits > 0 else 0
+        best_move = None
+        
+        for move, child in root.children.items():
+            move_distribution[move] = child.visits / total_visits if total_visits > 0 else 0
             if child.visits > best_visits:
                 best_visits = child.visits
-                best_action = action
-        return best_action, distribution
+                best_move = move
+                
+        return best_move, move_distribution
 
 if __name__ == "__main__":
     # Example usage
     env = Game2048Env()
-    approximator = NTupleApproximator.load_model("../converted_model.pkl")
-    tree_search = TreeSearch(env, approximator)
+    value_model = NTupleApproximator.load_model("../converted_model.pkl")
+    mcts = MCTS(env, value_model)
     
     # Initialize the game environment
-    state = env.reset()
+    board = env.reset()
     env.render()
     done = False
     score = 0
-    print("000")
+    
     while not done:
-        legal_moves = [a for a in range(4) if env.is_move_legal(a)]
+        legal_moves = [move for move in range(4) if env.is_move_legal(move)]
         if not legal_moves:
             break
 
-        root_node = DecisionNode(state, score, env=env)
-        for _ in range(tree_search.iterations):
-            tree_search.run_simulation(root_node)
+        root = ActionNode(board, score, env=env)
+        for _ in range(mcts.iterations):
+            mcts.simulate(root)
 
-        best_action, distribution = tree_search.best_action_distribution(root_node)
-        state, score, done, _ = env.step(best_action)  # Apply the selected action
-        print(state)
+        best_move, distribution = mcts.get_best_move(root)
+        board, score, done, _ = env.step(best_move)  # Apply the selected move
+        print(board)
