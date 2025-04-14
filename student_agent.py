@@ -17,7 +17,7 @@ def get_action(state, score):
 
     if not hasattr(get_action, "approximator"):
         print("Downloading model...")
-        get_action.approximator = NTupleApproximator.load_model("converted_model04_14.pkl")
+        get_action.approximator = NTupleApproximator.load_model("converted_model.pkl")
     
     env = Game2048Env()
     env.board = state
