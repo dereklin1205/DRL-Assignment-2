@@ -10,7 +10,7 @@ import math
 import gdown
 from collections import defaultdict
 from Approximator import NTupleApproximator
-from UCTMCTS import MCTS, ActionNode, ChanceNode
+from UCTMCTS import *
 from Game2048Env import Game2048Env
 def get_action(state, score):
     # Check if the function has the approximator attribute
@@ -31,7 +31,7 @@ def get_action(state, score):
             mcts.simulate(root)
     # Create the MCTS agent
 
-    best_action, distribution = mcts.best_action_distribution(root)
+    best_action, distribution = mcts.get_best_move(root)
     return best_action
     
 # main function for testing the agent
