@@ -250,3 +250,4 @@ if __name__ == "__main__":
         best_move, distribution = mcts.get_best_move(root)
         board, score, done, _ = env.step(best_move)  # Apply the selected move
         print(board)
+        print(score)
