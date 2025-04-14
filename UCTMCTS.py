@@ -229,7 +229,7 @@ class MCTS:
 if __name__ == "__main__":
     # Example usage
     env = Game2048Env()
-    value_model = NTupleApproximator.load_model("../converted_model.pkl")
+    value_model = NTupleApproximator.load_model("../converted_model04_14.pkl")
     mcts = MCTS(env, value_model)
     
     # Initialize the game environment
